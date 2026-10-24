@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import type { ExtractedIfc } from "./core.js";
 import { buildReferences } from "./references.js";
+import type { SerializedBVH } from "three-mesh-bvh";
 
 export type PreparedModel = {
   metadata: Record<string, any>;
   sections: Record<string, Float32Array | Uint32Array | Uint8Array>;
+  selectionIndices?: Partial<Record<"opaque" | "transparent", SerializedBVH>>;
 };
 
 export function prepareModel(data: ExtractedIfc, worldOrigin?: number[]): PreparedModel {

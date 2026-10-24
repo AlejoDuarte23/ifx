@@ -6,6 +6,7 @@ import {
   computeBoundsTree,
   disposeBoundsTree,
   CENTER,
+  MeshBVH,
 } from "three-mesh-bvh";
 
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -14,6 +15,7 @@ THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 
 import { OverlayScenes, disposeObject } from "./overlays.js";
 import { elementRanges, type ViewerElement, type ModelInfo, type ViewerEvents } from "./types.js";
+import type { PreparedModel } from "./prepared.js";
 
 export function createRuntime(
   root: HTMLElement,
@@ -262,7 +264,7 @@ export function createRuntime(
         (model.crs_name ? ` · ${model.crs_name}` : ""),
     );
 
-    await buildSelectionIndex(version);
+    await buildSelectionIndex(version, source.selectionIndices);
     if (disposed || version !== loadVersion)
       throw new Error("Model load was cancelled.");
     emit("ready", { model: parsed.metadata.model });
@@ -659,20 +661,22 @@ export function createRuntime(
       .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
   }
 
-  async function buildSelectionIndex(version) {
+  async function buildSelectionIndex(version, prepared: PreparedModel["selectionIndices"] = {}) {
     if (!state.batches.size) return;
     setStatus("Building fast selection index…");
     await nextFrame();
     try {
-      for (const { geometry } of state.batches.values()) {
+      for (const [name, { geometry }] of state.batches) {
         if (disposed || version !== loadVersion) return;
         // indirect preserves the original triangle order, so faceIndex still maps
         // to the correct IFC STEP id after the BVH is built.
-        geometry.computeBoundsTree({
-          strategy: CENTER,
-          indirect: true,
-          targetLeafSize: 24,
-        });
+        geometry.boundsTree = prepared[name]
+          ? MeshBVH.deserialize(prepared[name], geometry, { setIndex: false })
+          : geometry.computeBoundsTree({
+              strategy: CENTER,
+              indirect: true,
+              targetLeafSize: 24,
+            });
         await nextFrame();
       }
       if (disposed || version !== loadVersion) return;

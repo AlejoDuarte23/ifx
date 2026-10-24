@@ -56,7 +56,8 @@ import {
   acceleratedRaycast,
   computeBoundsTree,
   disposeBoundsTree,
-  CENTER
+  CENTER,
+  MeshBVH
 } from "three-mesh-bvh";
 
 // src/overlays.ts
@@ -387,7 +388,7 @@ function createRuntime(root2, CONFIG = {}) {
     setStatus(
       `${formatInteger(model.element_count || state.elementsById.size)} elements \xB7 ${formatInteger(triangleCount)} triangles` + (model.crs_name ? ` \xB7 ${model.crs_name}` : "")
     );
-    await buildSelectionIndex(version);
+    await buildSelectionIndex(version, source.selectionIndices);
     if (disposed || version !== loadVersion)
       throw new Error("Model load was cancelled.");
     emit("ready", { model: parsed.metadata.model });
@@ -736,14 +737,14 @@ function createRuntime(root2, CONFIG = {}) {
   function formatIfcType(type) {
     return String(type || "IfcProduct").replace(/^Ifc/, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2");
   }
-  async function buildSelectionIndex(version) {
+  async function buildSelectionIndex(version, prepared = {}) {
     if (!state.batches.size) return;
     setStatus("Building fast selection index\u2026");
     await nextFrame();
     try {
-      for (const { geometry } of state.batches.values()) {
+      for (const [name, { geometry }] of state.batches) {
         if (disposed || version !== loadVersion) return;
-        geometry.computeBoundsTree({
+        geometry.boundsTree = prepared[name] ? MeshBVH.deserialize(prepared[name], geometry, { setIndex: false }) : geometry.computeBoundsTree({
           strategy: CENTER,
           indirect: true,
           targetLeafSize: 24

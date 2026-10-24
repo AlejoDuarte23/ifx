@@ -215,23 +215,52 @@ def build_payload_from_documents(
         world_min = np.minimum(world_min, element_min)
         world_max = np.maximum(world_max, element_max)
 
-        base_color = _parse_color(raw_element.get("color", (0.72, 0.74, 0.78, 1.0)))
-        configured_color = overrides.get(express_id, base_color)
-        batch = "transparent" if configured_color[3] < 250 else "opaque"
-        geometries.append(
-            _ElementGeometry(
-                express_id=express_id,
-                ifc_type=str(raw_element.get("ifc_type") or "IfcProduct"),
-                global_id=_optional_string(raw_element.get("global_id")),
-                name=_optional_string(raw_element.get("name")),
-                vertices=vertices,
-                faces=faces,
-                base_color=base_color,
-                batch=batch,
-                world_min=element_min,
-                world_max=element_max,
-            )
+        groups = raw_element.get("material_groups")
+        source_groups = (
+            groups
+            if groups is not None
+            else [
+                {
+                    "triangle_start": 0,
+                    "triangle_count": len(faces),
+                    "color": raw_element.get("color", (0.72, 0.74, 0.78, 1.0)),
+                }
+            ]
         )
+        covered = 0
+        for group in source_groups:
+            start, count = int(group["triangle_start"]), int(group["triangle_count"])
+            if start != covered or count < 0 or start + count > len(faces):
+                raise ViewerBuildError(f"element #{express_id} has an invalid material range")
+            covered += count
+            if count == 0:
+                continue
+            part_faces = faces[start : start + count]
+            part_vertices = vertices
+            if groups is not None:
+                used, remap = np.unique(part_faces, return_inverse=True)
+                part_vertices = vertices[used]
+                part_faces = remap.reshape((-1, 3)).astype(np.uint32)
+            base_color = _parse_color(group["color"])
+            configured_color = overrides.get(express_id, base_color)
+            batch_color = base_color if groups is not None else configured_color
+            batch = "transparent" if batch_color[3] < 250 else "opaque"
+            geometries.append(
+                _ElementGeometry(
+                    express_id=express_id,
+                    ifc_type=str(raw_element.get("ifc_type") or "IfcProduct"),
+                    global_id=_optional_string(raw_element.get("global_id")),
+                    name=_optional_string(raw_element.get("name")),
+                    vertices=part_vertices,
+                    faces=part_faces,
+                    base_color=base_color,
+                    batch=batch,
+                    world_min=element_min,
+                    world_max=element_max,
+                )
+            )
+        if covered != len(faces):
+            raise ViewerBuildError(f"element #{express_id} has incomplete material ranges")
 
     if not geometries:
         raise ViewerBuildError("the IFC file produced no tessellated geometry")
@@ -299,6 +328,7 @@ def build_payload_from_documents(
                 ],
                 "base_color": list(element.base_color),
                 "configured_color": list(configured_color),
+                "color_override": element.express_id in overrides,
                 "display_color": list(display_color),
                 "attributes": _jsonable(row.get("attributes", [])),
                 "property_sets": _jsonable(row.get("property_sets", [])),
@@ -307,6 +337,38 @@ def build_payload_from_documents(
             }
         )
 
+    unique_elements: dict[int, dict[str, Any]] = {}
+    for element in metadata_elements:
+        element_id = element["id"]
+        target = unique_elements.setdefault(element_id, dict(element, geometry_ranges=[]))
+        ranges = target["geometry_ranges"]
+        material = {
+            "vertex_start": element["vertex_start"],
+            "vertex_count": element["vertex_count"],
+            "color": element["base_color"],
+        }
+        existing = next((item for item in ranges if item["batch"] == element["batch"]), None)
+        if existing is None:
+            ranges.append(
+                {
+                    key: element[key]
+                    for key in (
+                        "batch",
+                        "vertex_start",
+                        "vertex_count",
+                        "triangle_start",
+                        "triangle_count",
+                    )
+                }
+            )
+            ranges[-1]["materials"] = [material]
+        else:
+            existing["vertex_count"] += element["vertex_count"]
+            existing["triangle_count"] += element["triangle_count"]
+            existing["materials"].append(material)
+    metadata_elements = list(unique_elements.values())
+    for element in metadata_elements:
+        element.update(element["geometry_ranges"][0])
     metadata_elements.sort(key=lambda item: (item["batch"], item["triangle_start"]))
     batch_meta = {
         name: {
@@ -454,16 +516,26 @@ def restyle_payload(
         configured_color = overrides.get(express_id, base_color)
         display_color = (*configured_color[:3], 0) if express_id in hidden else configured_color
 
-        batch_name = str(element.get("batch") or "opaque")
-        colors = color_arrays.get(batch_name)
-        if colors is None:
-            raise ViewerBuildError(f"element #{express_id} references unknown batch {batch_name!r}")
-        vertex_start = int(element.get("vertex_start", 0))
-        vertex_count = int(element.get("vertex_count", 0))
-        vertex_end = vertex_start + vertex_count
-        if vertex_start < 0 or vertex_count < 0 or vertex_end > len(colors):
-            raise ViewerBuildError(f"element #{express_id} has an invalid vertex-color range")
-        colors[vertex_start:vertex_end] = np.asarray(display_color, dtype=np.uint8)
+        for render_range in element.get("geometry_ranges", [element]):
+            batch_name = str(render_range.get("batch") or "opaque")
+            colors = color_arrays.get(batch_name)
+            if colors is None:
+                raise ViewerBuildError(
+                    f"element #{express_id} references unknown batch {batch_name!r}"
+                )
+            for material in render_range.get("materials", [dict(render_range, color=base_color)]):
+                vertex_start = int(material.get("vertex_start", 0))
+                vertex_count = int(material.get("vertex_count", 0))
+                vertex_end = vertex_start + vertex_count
+                if vertex_start < 0 or vertex_count < 0 or vertex_end > len(colors):
+                    raise ViewerBuildError(
+                        f"element #{express_id} has an invalid vertex-color range"
+                    )
+                color = overrides.get(express_id, _parse_color(material["color"]))
+                if express_id in hidden:
+                    color = (*color[:3], 0)
+                colors[vertex_start:vertex_end] = np.asarray(color, dtype=np.uint8)
+        element["color_override"] = express_id in overrides
         element["configured_color"] = list(configured_color)
         element["display_color"] = list(display_color)
 

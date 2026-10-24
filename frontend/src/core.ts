@@ -66,6 +66,7 @@ export type CoreGeometry = {
       vertices: number[][];
       faces: number[][];
       color: number[];
+      material_groups?: { triangle_start: number; triangle_count: number; color: number[] }[];
     }
   >;
 };

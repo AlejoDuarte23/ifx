@@ -21,6 +21,7 @@ export {
   type TessellationQuality,
 } from "./core.js";
 export { prepareModel, type PreparedModel } from "./prepared.js";
+export { elementRanges, type GeometryRange } from "./types.js";
 export { OverlayScenes } from "./overlays.js";
 export {
   ConnectedVolumes, findConnectedVolumes,

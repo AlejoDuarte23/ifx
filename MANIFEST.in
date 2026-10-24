@@ -1,8 +1,8 @@
-recursive-include src/ifcx/static *.js *.ts *.css *.map *.txt
+recursive-include src/ifx/static *.js *.ts *.css *.map *.txt
 include frontend/README.md
 include frontend/build.mjs
 include frontend/package.json
 include frontend/package-lock.json
-recursive-include frontend *.mjs *.json *.md
+recursive-include frontend *.mjs *.json *.md *.ts *.html
 include README.md LICENSE THIRD_PARTY_NOTICES.md
 prune frontend/node_modules

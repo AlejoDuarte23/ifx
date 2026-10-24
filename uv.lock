@@ -272,24 +272,11 @@ wheels = [
 ]
 
 [[package]]
-name = "ifclite-geom"
-version = "4.4.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/b9/3021367b817b99fb21de93edea0ba437b74962363cab7d636b2e4e9e8f6c/ifclite_geom-4.4.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:bbfc07ac861c8278b6e4fb9457e6524b7591ca4a97a2da0ce62c393410246f87", size = 2261699 },
-    { url = "https://files.pythonhosted.org/packages/32/fd/4b48c58fbce3221783d6271447d2e5ee4ef20adb20fc6d5480aa9ba3f3d3/ifclite_geom-4.4.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:56e3168912db21bcd3768d9a12d858fa4b77ab8f1c970eddde26009888bfd29b", size = 2177783 },
-    { url = "https://files.pythonhosted.org/packages/2d/ba/db5c37e55cca3b5b5da70873f353244c14b3cee984068c4c654ec5cfba54/ifclite_geom-4.4.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac5d6e92470a9e58f75391128e86a5dea533b05bd61cc6a168e821b5c3a7f376", size = 2374121 },
-    { url = "https://files.pythonhosted.org/packages/be/3e/473c0131860e1273002d343f9ccb4b104ec2fdfe6210c0bab1cbe53b00be/ifclite_geom-4.4.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:68e93b24e14d3458ccd305bf3e78452804d8c410bfba3709e96bd804405dacbd", size = 2470191 },
-    { url = "https://files.pythonhosted.org/packages/08/b3/436aaa76d6c1d8feb015a5d63df8d265b32de3d7a167f1c59acd95a15200/ifclite_geom-4.4.0-cp39-abi3-win_amd64.whl", hash = "sha256:7fb865f49a9b74ae62ae0cba22f1602b5a760d7303782b5f220d4340b05a35d3", size = 2151291 },
-]
-
-[[package]]
-name = "ifcx"
+name = "ifx"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "ifclite-geom" },
-    { name = "ifcx-core" },
+    { name = "ifx-core" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -310,8 +297,7 @@ viktor = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ifclite-geom", specifier = ">=4.4.0,<6" },
-    { name = "ifcx-core", git = "https://github.com/AlejoDuarte23/ifcx-core.git?rev=first-draft" },
+    { name = "ifx-core", editable = "../ifx-core" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
@@ -322,9 +308,24 @@ requires-dist = [
 provides-extras = ["dev", "test", "viktor"]
 
 [[package]]
-name = "ifcx-core"
+name = "ifx-core"
 version = "0.1.0"
-source = { git = "https://github.com/AlejoDuarte23/ifcx-core.git?rev=first-draft#99a7ee1e591d4037720caa968d6d0b7afb2c7e9e" }
+source = { editable = "../ifx-core" }
+
+[package.metadata]
+requires-dist = [
+    { name = "ifcopenshell", marker = "python_full_version >= '3.10' and python_full_version < '3.15' and extra == 'test'", specifier = "==0.8.5" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
+]
+provides-extras = ["test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ifcopenshell", marker = "python_full_version >= '3.10' and python_full_version < '3.15'", specifier = "==0.8.5" },
+    { name = "maturin", specifier = ">=1.9,<2.0" },
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.12,<1" },
+]
 
 [[package]]
 name = "iniconfig"

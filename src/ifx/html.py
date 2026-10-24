@@ -1,7 +1,3 @@
-"""HTML assembly for the browser viewer."""
-
-from __future__ import annotations
-
 import base64
 import html
 import json
@@ -20,6 +16,7 @@ def render_html(
     payload: bytes | None = None,
     payload_url: str | None = None,
     asset_mode: AssetMode = "auto",
+    module_script: str | None = None,
 ) -> str:
     """Render the complete viewer page.
 
@@ -32,7 +29,7 @@ def render_html(
         raise ValueError("provide exactly one of payload or payload_url")
     if asset_mode not in {"auto", "bundle", "cdn"}:
         raise ValueError("asset_mode must be 'auto', 'bundle', or 'cdn'")
-    static_root = resources.files("ifcx").joinpath("static")
+    static_root = resources.files("ifx").joinpath("static")
     css = static_root.joinpath("viewer.css").read_text(encoding="utf-8")
     source_js = static_root.joinpath("viewer.js").read_text(encoding="utf-8")
     bundle_path = static_root.joinpath("viewer.bundle.js")
@@ -45,18 +42,18 @@ def render_html(
         resolved_mode = asset_mode
     if resolved_mode == "bundle" and not has_bundle:
         raise RuntimeError(
-            "the bundled frontend is missing; run `ifcx-build-frontend` "
+            "the bundled frontend is missing; run `ifx-build-frontend` "
             "before building your wheel, or use asset_mode='cdn'"
         )
 
     if payload is not None:
         encoded = base64.b64encode(payload).decode("ascii")
         payload_markup = (
-            f'<script id="ifcx-payload" type="application/octet-stream">{encoded}</script>'
+            f'<script id="ifx-payload" type="application/octet-stream">{encoded}</script>'
         )
         payload_config = {
             "mode": "inline",
-            "elementId": "ifcx-payload",
+            "elementId": "ifx-payload",
             "encoding": "gzip-base64",
         }
     else:
@@ -100,6 +97,8 @@ def render_html(
 
     # Avoid accidentally closing the inline module if a future dependency or
     # source comment contains that byte sequence.
+    if module_script is not None:
+        module_js = module_script
     safe_module_js = module_js.replace("</script", "<\\/script")
     safe_css = css.replace("</style", "<\\/style")
     page_title = html.escape(title, quote=True)
@@ -115,8 +114,8 @@ def render_html(
   {import_map}
 </head>
 <body>
-  <main id="ifcx-root" aria-label="IFC model viewer">
-    <canvas id="ifcx-canvas"></canvas>
+  <main id="ifx-root" aria-label="IFC model viewer">
+    <canvas id="ifx-canvas"></canvas>
     <div class="viewer-toolbar" role="toolbar" aria-label="Viewer controls">
       <button type="button" data-action="fit" aria-label="Fit model" data-tooltip="Fit model">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4a1 1 0 0 0-1 1v4M16 3h4a1 1 0 0 1 1 1v4M21 16v4a1 1 0 0 1-1 1h-4M8 21H4a1 1 0 0 1-1-1v-4"/></svg>
@@ -128,8 +127,8 @@ def render_html(
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg>
       </button>
     </div>
-    <div id="ifcx-status" class="viewer-status" role="status">Preparing viewer…</div>
-    <aside id="ifcx-panel" class="viewer-panel" aria-label="IFC properties" aria-hidden="true">
+    <div id="ifx-status" class="viewer-status" role="status">Preparing viewer…</div>
+    <aside id="ifx-panel" class="viewer-panel" aria-label="IFC properties" aria-hidden="true">
       <header class="panel-header">
         <h1>Properties</h1>
         <button type="button" class="panel-close" data-action="toggle-panel" aria-label="Close properties">
@@ -140,7 +139,7 @@ def render_html(
         <p class="panel-empty">Click an element in the model to inspect it.</p>
       </div>
     </aside>
-    <aside id="ifcx-model-panel" class="viewer-panel model-panel" aria-label="IFC model hierarchy" aria-hidden="true">
+    <aside id="ifx-model-panel" class="viewer-panel model-panel" aria-label="IFC model hierarchy" aria-hidden="true">
       <header class="panel-header">
         <h1>Model</h1>
         <button type="button" class="panel-close" data-action="toggle-model" aria-label="Close model hierarchy">
@@ -149,11 +148,11 @@ def render_html(
       </header>
       <label class="model-search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
-        <input id="ifcx-model-search" type="search" placeholder="Search elements" autocomplete="off">
+        <input id="ifx-model-search" type="search" placeholder="Search elements" autocomplete="off">
       </label>
-      <div id="ifcx-model-tree" class="model-tree"></div>
+      <div id="ifx-model-tree" class="model-tree"></div>
     </aside>
-    <div id="ifcx-context-menu" class="viewer-context-menu" role="menu" hidden>
+    <div id="ifx-context-menu" class="viewer-context-menu" role="menu" hidden>
       <button type="button" role="menuitem" data-context-action="show-properties">Show properties</button>
       <button type="button" role="menuitem" data-context-action="isolate">Isolate</button>
       <button type="button" role="menuitem" data-context-action="hide-selected">Hide selected</button>
@@ -161,7 +160,7 @@ def render_html(
     </div>
   </main>
   {payload_markup}
-  <script>globalThis.__IFCLITE_VIEWER_CONFIG__={config_json};</script>
+  <script>globalThis.__IFX_VIEWER_CONFIG__={config_json};</script>
   <script type="module">{safe_module_js}</script>
 </body>
 </html>"""

@@ -1,5 +1,3 @@
-"""Python-first IFC viewer backed by IFClite and Three.js."""
-
 from .server import ViewerHandle
 from .viewer import IFCViewer
 

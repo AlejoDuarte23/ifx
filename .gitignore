@@ -8,3 +8,5 @@ build/
 dist/
 frontend/node_modules/
 output/
+frontend/src/wasm/
+docs/screenshots/selection-transparency-review.jpg

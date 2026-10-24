@@ -1,7 +1,3 @@
-"""Extract display units from an IFC project's unit assignment."""
-
-from __future__ import annotations
-
 import re
 
 _ENTITY_FLAGS = re.IGNORECASE | re.DOTALL

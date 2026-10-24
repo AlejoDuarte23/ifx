@@ -1,43 +1,40 @@
 name: CI
-
-on:
-  push:
-  pull_request:
-
+on: [push, pull_request]
 permissions:
   contents: read
-
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check out the core next to the viewer
+        uses: actions/checkout@v4
+        with:
+          repository: AlejoDuarte23/ifx-core
+          ref: 680fc2c62af5a3029fe57c045a79009bd4b503c7
+          path: core-source
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-          cache: pip
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Install frontend dependencies
-        run: npm ci --prefix frontend
-      - name: Type check frontend
-        run: npm run typecheck --prefix frontend
-      - name: Build frontend
-        run: npm run build --prefix frontend
-      - name: Check generated frontend
-        run: git diff --exit-code -- src/ifcx/static/viewer.js src/ifcx/static/viewer.bundle.js src/ifcx/static/viewer.bundle.js.map
-      - name: Install development dependencies
-        run: python -m pip install --editable ".[dev]"
-      - name: Check formatting
-        run: ruff format --check .
-      - name: Lint
-        run: ruff check .
-      - name: Type check
-        run: ty check
-      - name: Test
-        run: pytest -m "not integration"
-      - name: Test VIKTOR IFC sample models
-        run: pytest -m integration tests/test_sample_models.py
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the local core and Python tools
+        run: |
+          python -m pip install maturin
+          maturin build --release --manifest-path core-source/Cargo.toml --out core-source/dist
+          python -m pip install core-source/dist/*.whl
+          python -m pip install --editable ".[dev]"
+      - name: Build the WASM core
+        working-directory: core-source
+        run: ./scripts/build-wasm.sh
+      - run: npm ci --prefix frontend
+      - run: npm run test --prefix frontend
+        env:
+          IFX_CORE_SOURCE: ${{ github.workspace }}/core-source
+      - run: npm run typecheck --prefix frontend
+      - run: ruff format --check src tests examples scripts
+      - run: ruff check src tests examples scripts
+      - run: ty check
+      - run: pytest -m "not integration"

@@ -1,7 +1,3 @@
-"""Small local HTTP server used by ``IFCViewer.view()``."""
-
-from __future__ import annotations
-
 import threading
 import time
 import webbrowser
@@ -66,7 +62,7 @@ def start_viewer_server(
     html_bytes = html.encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "IFCX/0.1"
+        server_version = "IFX/0.1"
 
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = self.path.split("?", 1)[0]
@@ -108,7 +104,7 @@ def start_viewer_server(
     url = f"http://127.0.0.1:{actual_port}{base_path}/"
     thread = threading.Thread(
         target=server.serve_forever,
-        name=f"ifcx-{actual_port}",
+        name=f"ifx-{actual_port}",
         daemon=True,
     )
     thread.start()

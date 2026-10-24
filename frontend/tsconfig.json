@@ -15,5 +15,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["../src/ifcx/static/viewer.ts"]
+  "include": ["../src/ifx/static/viewer.ts", "src/**/*.ts"]
 }

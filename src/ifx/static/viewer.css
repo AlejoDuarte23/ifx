@@ -12,7 +12,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 
-#ifcx-root {
+#ifx-root {
   position: relative;
   width: 100%;
   height: 100%;
@@ -21,7 +21,7 @@ button { cursor: pointer; }
   background: #f7f8fa;
 }
 
-#ifcx-canvas {
+#ifx-canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -139,7 +139,7 @@ button { cursor: pointer; }
 }
 .viewer-panel.open { opacity: 1; transform: none; pointer-events: auto; }
 .viewer-panel.dragging { box-shadow: 0 24px 64px rgb(31 39 48 / 22%); transition: none; user-select: none; }
-#ifcx-panel { height: min(420px, calc(100% - 48px)); }
+#ifx-panel { height: min(420px, calc(100% - 48px)); }
 
 .panel-header {
   display: flex;
@@ -153,8 +153,8 @@ button { cursor: pointer; }
 }
 .viewer-panel.dragging .panel-header { cursor: grabbing; }
 .panel-header h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
-#ifcx-panel .panel-header { min-height: 52px; padding: 10px 16px 6px; }
-#ifcx-panel .panel-header h1 { font-size: 16px; }
+#ifx-panel .panel-header { min-height: 52px; padding: 10px 16px 6px; }
+#ifx-panel .panel-header h1 { font-size: 16px; }
 .panel-close { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 7px; color: #1c222a; background: transparent; }
 .panel-close:hover { background: #f0f2f4; }
 .panel-close svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
@@ -318,8 +318,8 @@ dd { color: #171a22; font-size: 12px; }
   .viewer-panel { top: auto; right: 0; bottom: 0; left: 0; width: 100%; height: min(72vh, 620px); border-right: 0; border-bottom: 0; border-left: 0; border-radius: 14px 14px 0 0; transform: translateY(12px); }
   .viewer-panel.open { transform: none; }
   .panel-header { min-height: 70px; padding: 15px 20px 10px; cursor: default; touch-action: auto; }
-  #ifcx-panel { height: min(68vh, 540px); }
-  #ifcx-panel .panel-header { min-height: 56px; padding: 10px 16px 7px; }
+  #ifx-panel { height: min(68vh, 540px); }
+  #ifx-panel .panel-header { min-height: 56px; padding: 10px 16px 7px; }
   .property-card, .property-group { padding: 14px 16px; }
   .identity-grid, .property-list, .attributes, .quantities { grid-template-columns: minmax(92px, .68fr) minmax(0, 1.32fr); gap: 0 10px; }
 }

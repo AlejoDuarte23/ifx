@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 import urllib.request
 
-from ifcx.html import render_html
-from ifcx.server import start_viewer_server
+from ifx.html import render_html
+from ifx.server import start_viewer_server
 
 
 def test_inline_html_uses_pinned_cdn_modules():
@@ -15,14 +13,14 @@ def test_inline_html_uses_pinned_cdn_modules():
     assert "Model &lt;A&gt;" in page
     assert "three@0.185.1" in page
     assert "three-mesh-bvh@0.9.14" in page
-    assert "ifcx-payload" in page
+    assert "ifx-payload" in page
     assert "Y29tcHJlc3NlZC1kYXRh" in page
     assert 'data-action="toggle-double-side"' not in page
-    assert "THREE.DoubleSide" in page
+    assert "__IFX_VIEWER_CONFIG__" in page
     assert 'data-context-action="hide-selected"' in page
     assert 'data-action="toggle-model"' in page
-    assert 'id="ifcx-model-tree"' in page
-    assert 'id="ifcx-panel" class="viewer-panel"' in page
+    assert 'id="ifx-model-tree"' in page
+    assert 'id="ifx-panel" class="viewer-panel"' in page
     assert 'aria-label="IFC properties" aria-hidden="true"' in page
 
 

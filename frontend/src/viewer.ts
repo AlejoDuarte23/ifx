@@ -17,6 +17,7 @@ export type ViewerOptions = CoreOptions & {
   ui?: boolean;
   openPropertiesOnSelect?: boolean;
   selectionColor?: THREE.ColorRepresentation;
+  copyPreparedMetadata?: boolean;
 };
 export type Viewer = ViewerRuntime & {
   load(source: IfcSource): Promise<ExtractedIfc>;

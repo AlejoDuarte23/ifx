@@ -54,6 +54,16 @@ Give the container a width and height. The standard UI is inside a shadow root. 
 
 Overlay removal preserves app resources unless `dispose=true`. Viewer disposal releases all remaining overlay geometry and materials. Remove an overlay first if another viewer still uses those resources. `clear()` leaves overlays in place.
 
+Worker callers can supply `PreparedModel.selectionIndices` for the opaque and
+transparent batches. Build each tree from the matching position and index
+buffers with `indirect: true`, then use `MeshBVH.serialize`. The viewer restores
+these trees without rebuilding them. Loads without prepared trees retain the
+existing selection setup.
+
+Set `copyPreparedMetadata: false` only when the caller gives the viewer ownership
+of prepared metadata, such as a result already copied from a worker. The default
+keeps a separate copy for callers that share prepared data.
+
 IFC and LandXML world coordinates must be in the same frame. Core geometry is already in world metres with Z up. Viewer meshes subtract `getModelInfo().world_origin` once to preserve Float32 precision. Use `toLocal` for world-space custom objects. Colors do not change IFC properties.
 
 `extractIfc(bytes)` is also available without a viewer. The result separates `geometry`, `entities`, and semantic `model` data. Property and quantity values keep their source units. IFC2X3, IFC4 and IFC4X3 STEP files are supported. IFCZIP is not supported in this path.

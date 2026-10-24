@@ -19,7 +19,7 @@ import type { PreparedModel } from "./prepared.js";
 
 export function createRuntime(
   root: HTMLElement,
-  CONFIG: { openPropertiesOnSelect?: boolean; selectionColor?: THREE.ColorRepresentation } = {},
+  CONFIG: { openPropertiesOnSelect?: boolean; selectionColor?: THREE.ColorRepresentation; copyPreparedMetadata?: boolean } = {},
 ) {
   let statusTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
@@ -231,7 +231,7 @@ export function createRuntime(
       ? input
       : parseContainer(await gunzip(input));
     const parsed = {
-      metadata: structuredClone(source.metadata),
+      metadata: CONFIG.copyPreparedMetadata === false ? source.metadata : structuredClone(source.metadata),
       sections: {
         ...source.sections,
         opaque_colors: source.sections.opaque_colors.slice(),

@@ -360,7 +360,7 @@ function createRuntime(root2, CONFIG = {}) {
     const version = ++loadVersion;
     const source = input?.metadata ? input : parseContainer(await gunzip(input));
     const parsed = {
-      metadata: structuredClone(source.metadata),
+      metadata: CONFIG.copyPreparedMetadata === false ? source.metadata : structuredClone(source.metadata),
       sections: {
         ...source.sections,
         opaque_colors: source.sections.opaque_colors.slice(),

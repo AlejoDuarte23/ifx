@@ -1,6 +1,6 @@
 {
   "name": "ifx-viewer",
-  "version": "0.1.0-local.24",
+  "version": "0.1.0-local.25",
   "description": "Browser-native IFC viewer and typed IFC data access",
   "license": "MIT",
   "sideEffects": false,

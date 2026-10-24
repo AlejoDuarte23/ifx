@@ -445,3 +445,29 @@ def test_restyle_patches_colors_without_moving_geometry_batches():
     colors = np.frombuffer(sections["opaque_colors"], dtype=np.uint8).reshape(-1, 4)
     assert np.all(colors == [79, 140, 255, 0])
     assert sections["transparent_colors"] == b""
+
+
+def test_material_groups_keep_one_identity_and_restore_after_restyle():
+    geometry, entities = fake_documents()
+    geometry["elements"][42]["material_groups"] = [
+        {"triangle_start": 0, "triangle_count": 1, "color": [0.9, 0.9, 0.9, 1.0]},
+        {"triangle_start": 1, "triangle_count": 1, "color": [0.1, 0.1, 0.1, 0.12]},
+    ]
+    payload = build_payload_from_documents(geometry, entities)
+    _, metadata, original = unpack_container(payload.compressed)
+    assert metadata["model"]["element_count"] == 1
+    assert len(metadata["elements"]) == 1
+    ranges = metadata["elements"][0]["geometry_ranges"]
+    assert [(item["batch"], item["triangle_count"]) for item in ranges] == [
+        ("opaque", 1),
+        ("transparent", 1),
+    ]
+    assert original["transparent_colors"][3] == 31
+    styled = restyle_payload(payload, initial_colors={42: "#ff0000"}, hidden_ids=[42])
+    _, _, sections = unpack_container(styled.compressed)
+    for batch in ["opaque", "transparent"]:
+        colors = np.frombuffer(sections[f"{batch}_colors"], dtype=np.uint8).reshape((-1, 4))
+        assert np.all(colors == [255, 0, 0, 0])
+    restored = restyle_payload(styled)
+    _, _, restored_sections = unpack_container(restored.compressed)
+    assert restored_sections == original

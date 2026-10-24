@@ -153,6 +153,11 @@ var OverlayScenes = class {
   }
 };
 
+// src/types.ts
+function elementRanges(element) {
+  return element.geometry_ranges ?? [element];
+}
+
 // src/runtime.ts
 THREE3.Mesh.prototype.raycast = acceleratedRaycast;
 THREE3.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -478,7 +483,14 @@ function createRuntime(root2, CONFIG = {}) {
       indices,
       material
     ) : { renderMeshes: /* @__PURE__ */ new Map(), depthMaterial: null };
+    const baseColors = colors.slice();
+    for (const range of state.rangesByBatch.get(name) || []) {
+      for (const source of range.materials ?? [{ ...range, color: range.base_color }]) {
+        for (let i = source.vertex_start * 4; i < (source.vertex_start + source.vertex_count) * 4; i += 4) baseColors.set(source.color, i);
+      }
+    }
     state.batches.set(name, {
+      baseColors,
       mesh,
       geometry,
       material,
@@ -552,12 +564,12 @@ function createRuntime(root2, CONFIG = {}) {
       const id = Number(element.id);
       element.id = id;
       state.elementsById.set(id, element);
-      if (!ranges.has(element.batch)) ranges.set(element.batch, []);
-      ranges.get(element.batch).push(element);
-      if (Array.isArray(element.configured_color)) {
+      for (const range of elementRanges(element)) {
+        if (!ranges.has(range.batch)) ranges.set(range.batch, []);
+        ranges.get(range.batch).push({ ...element, ...range });
+      }
+      if (element.color_override ?? (Array.isArray(element.configured_color) && element.configured_color.some((value, i) => value !== element.base_color?.[i]))) {
         state.customColors.set(id, element.configured_color.slice());
-      } else if (Array.isArray(element.base_color)) {
-        state.customColors.set(id, element.base_color.slice());
       }
       if (SEMANTIC_HELPER_TYPES.has(element.ifc_type) || Array.isArray(element.display_color) && (element.display_color[3] ?? 255) === 0) {
         state.hidden.add(id);
@@ -791,7 +803,7 @@ function createRuntime(root2, CONFIG = {}) {
       const end = start + item.triangle_count;
       if (triangleIndex < start) high = middle - 1;
       else if (triangleIndex >= end) low = middle + 1;
-      else return item;
+      else return state.elementsById.get(item.id);
     }
     return null;
   }
@@ -1153,7 +1165,7 @@ function createRuntime(root2, CONFIG = {}) {
     const ids = normaliseIds(expressIds);
     for (const id of ids) {
       const element = state.elementsById.get(id);
-      if (element) state.customColors.set(id, element.base_color.slice());
+      if (element) state.customColors.delete(id);
     }
     refreshElementColors(ids);
     if (state.selectedId !== null && ids.includes(state.selectedId)) {
@@ -1216,18 +1228,6 @@ function createRuntime(root2, CONFIG = {}) {
     if (modelPanel.classList.contains("open"))
       renderModelTree(modelSearch.value);
   }
-  function effectiveColor(element) {
-    const color = (state.customColors.get(element.id) || element.base_color || [184, 188, 199, 255]).slice();
-    if (state.hidden.has(element.id)) color[3] = 0;
-    else if (state.modelFocusIds) {
-      if (state.modelFocusIds.has(element.id)) {
-        color[3] = 0;
-      } else {
-        color[3] = Math.min(color[3], 18);
-      }
-    }
-    return color;
-  }
   function updateFocusOverlay() {
     for (const [batchName, batch] of state.batches) {
       const focus = ensureFocusMesh(batchName, batch);
@@ -1288,22 +1288,8 @@ function createRuntime(root2, CONFIG = {}) {
       child.material?.dispose();
     }
     if (state.selectedId === null) return;
-    const element = state.elementsById.get(state.selectedId);
-    const batch = element && state.batches.get(element.batch);
-    if (!element || !batch) return;
-    const sourcePositions = batch.geometry.getAttribute("position").array;
-    const sourceIndices = batch.geometry.index.array;
-    const vertexStart = element.vertex_start;
-    const vertexEnd = vertexStart + element.vertex_count;
-    const indexStart = element.triangle_start * 3;
-    const indexEnd = indexStart + element.triangle_count * 3;
-    const positions = sourcePositions.slice(vertexStart * 3, vertexEnd * 3);
-    const indices = sourceIndices.slice(indexStart, indexEnd);
-    for (let index = 0; index < indices.length; index += 1)
-      indices[index] -= vertexStart;
-    const geometry = new THREE3.BufferGeometry();
-    geometry.setAttribute("position", new THREE3.BufferAttribute(positions, 3));
-    geometry.setIndex(new THREE3.BufferAttribute(indices, 1));
+    const geometry = getElementGeometry(state.selectedId);
+    if (!geometry) return;
     const fill = new THREE3.Mesh(
       geometry,
       new THREE3.MeshBasicMaterial({
@@ -1341,29 +1327,26 @@ function createRuntime(root2, CONFIG = {}) {
     for (const id of new Set(expressIds.map(Number))) {
       const element = state.elementsById.get(id);
       if (!element) continue;
-      const batch = state.batches.get(element.batch);
-      if (!batch) continue;
-      const attribute = batch.geometry.getAttribute("color");
-      const array = attribute.array;
-      const color = effectiveColor(element);
-      const componentStart = element.vertex_start * 4;
-      const componentEnd = componentStart + element.vertex_count * 4;
-      for (let index = componentStart; index < componentEnd; index += 4) {
-        array[index] = color[0];
-        array[index + 1] = color[1];
-        array[index + 2] = color[2];
-        array[index + 3] = color[3];
+      for (const range of elementRanges(element)) {
+        const batch = state.batches.get(range.batch);
+        if (!batch) continue;
+        const attribute = batch.geometry.getAttribute("color");
+        const array = attribute.array;
+        const custom = state.customColors.get(id);
+        const componentStart = range.vertex_start * 4;
+        const componentEnd = componentStart + range.vertex_count * 4;
+        for (let index = componentStart; index < componentEnd; index += 4) {
+          for (let channel = 0; channel < 4; channel++) array[index + channel] = custom?.[channel] ?? batch.baseColors[index + channel];
+          if (state.hidden.has(id) || state.modelFocusIds?.has(id)) array[index + 3] = 0;
+          else if (state.modelFocusIds) array[index + 3] = Math.min(array[index + 3], 18);
+        }
+        const changed = dirty.get(range.batch) || { start: componentStart, end: componentEnd };
+        changed.start = Math.min(changed.start, componentStart);
+        changed.end = Math.max(changed.end, componentEnd);
+        dirty.set(range.batch, changed);
+        const renderMesh = batch.renderMeshes?.get(id);
+        if (renderMesh) renderMesh.geometry.getAttribute("color").needsUpdate = true;
       }
-      const range = dirty.get(element.batch) || {
-        start: componentStart,
-        end: componentEnd
-      };
-      range.start = Math.min(range.start, componentStart);
-      range.end = Math.max(range.end, componentEnd);
-      dirty.set(element.batch, range);
-      const renderMesh = batch.renderMeshes?.get(id);
-      if (renderMesh)
-        renderMesh.geometry.getAttribute("color").needsUpdate = true;
     }
     for (const [batchName, range] of dirty) {
       const attribute = state.batches.get(batchName).geometry.getAttribute("color");
@@ -1912,15 +1895,19 @@ function createRuntime(root2, CONFIG = {}) {
   }
   function getElementGeometry(id) {
     const element = state.elementsById.get(Number(id));
-    const batch = element && state.batches.get(element.batch);
-    if (!batch) return null;
-    const start = element.vertex_start;
-    const positions = batch.geometry.getAttribute("position").array.slice(start * 3, (start + element.vertex_count) * 3);
-    const indices = batch.geometry.index.array.slice(
-      element.triangle_start * 3,
-      (element.triangle_start + element.triangle_count) * 3
-    );
-    for (let i = 0; i < indices.length; i++) indices[i] -= start;
+    if (!element) return null;
+    const ranges = elementRanges(element);
+    const positions = new Float32Array(ranges.reduce((sum, range) => sum + range.vertex_count * 3, 0));
+    const indices = new Uint32Array(ranges.reduce((sum, range) => sum + range.triangle_count * 3, 0));
+    let vertex = 0, triangle = 0;
+    for (const range of ranges) {
+      const batch = state.batches.get(range.batch);
+      if (!batch) return null;
+      positions.set(batch.geometry.getAttribute("position").array.subarray(range.vertex_start * 3, (range.vertex_start + range.vertex_count) * 3), vertex * 3);
+      const source = batch.geometry.index.array.subarray(range.triangle_start * 3, (range.triangle_start + range.triangle_count) * 3);
+      for (const index of source) indices[triangle++] = index - range.vertex_start + vertex;
+      vertex += range.vertex_count;
+    }
     const geometry = new THREE3.BufferGeometry();
     geometry.setAttribute("position", new THREE3.BufferAttribute(positions, 3));
     geometry.setIndex(new THREE3.BufferAttribute(indices, 1));

@@ -1,6 +1,6 @@
 import viktor as vkt
 
-from ifcx import IFCViewer
+from ifx import IFCViewer
 
 
 class Parametrization(vkt.Parametrization):

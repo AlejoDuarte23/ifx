@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from ifcx.units import extract_project_units
+from ifx.units import extract_project_units
 
 
 def test_extracts_project_si_and_conversion_units():

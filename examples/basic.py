@@ -1,4 +1,4 @@
-from ifcx import IFCViewer
+from ifx import IFCViewer
 
 viewer = IFCViewer("building.ifc", title="Building model", quality="medium")
 viewer.color_by_type("IfcSpace", "#4f8cff66")

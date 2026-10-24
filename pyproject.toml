@@ -3,15 +3,15 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ifcx"
+name = "ifx"
 version = "0.1.0"
-description = "Python-first IFC viewer using IFClite geometry and a bundled Three.js frontend"
+description = "IFC2X3/IFC4/IFC4X3 viewer for Python and browser TypeScript"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "src/ifcx/static/licenses/*.txt"]
-authors = [{ name = "IFCX Contributors" }]
-keywords = ["ifc", "bim", "three.js", "viewer", "ifclite", "viktor"]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "src/ifx/static/licenses/*.txt"]
+authors = [{ name = "IFX Contributors" }]
+keywords = ["ifc", "bim", "three.js", "viewer", "viktor"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",
@@ -19,10 +19,15 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-  "ifclite-geom>=4.4.0,<6",
-  "ifcx-core @ git+https://github.com/AlejoDuarte23/ifcx-core.git@first-draft",
+  "ifx-core>=0.1.0,<0.2",
   "numpy>=1.24",
 ]
+
+[project.urls]
+Repository = "https://github.com/AlejoDuarte23/ifx"
+
+[tool.uv.sources]
+ifx-core = { path = "../ifx-core", editable = true }
 
 [project.optional-dependencies]
 dev = [
@@ -34,8 +39,8 @@ test = ["pytest>=8.0"]
 viktor = ["viktor>=14"]
 
 [project.scripts]
-ifcx = "ifcx.cli:main"
-ifcx-build-frontend = "ifcx.build_frontend:main"
+ifx = "ifx.cli:main"
+ifx-build-frontend = "ifx.build_frontend:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -45,7 +50,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-ifcx = [
+ifx = [
   "static/*.js",
   "static/*.ts",
   "static/*.css",

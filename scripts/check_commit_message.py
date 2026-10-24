@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Validate IFCX commit subjects against the repository convention."""
-
-from __future__ import annotations
+"""Validate IFX commit subjects against the repository convention."""
 
 import re
 import sys

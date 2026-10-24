@@ -1,4 +1,4 @@
-# Contributing to IFCX
+# Contributing to IFX
 
 ## Commit messages
 

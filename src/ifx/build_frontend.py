@@ -1,7 +1,3 @@
-"""Build the vendored browser bundle before publishing a wheel."""
-
-from __future__ import annotations
-
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,7 +11,7 @@ def main() -> int:
         raise RuntimeError("npm is required to build the frontend bundle")
     subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=frontend, check=True)
     subprocess.run([npm, "run", "build"], cwd=frontend, check=True)
-    bundle = project_root / "src" / "ifcx" / "static" / "viewer.bundle.js"
+    bundle = project_root / "src" / "ifx" / "static" / "viewer.bundle.js"
     if not bundle.is_file():
         raise RuntimeError(f"frontend build completed without creating {bundle}")
     print(bundle)

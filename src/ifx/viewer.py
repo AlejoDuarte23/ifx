@@ -1,13 +1,9 @@
-"""Public Python API."""
-
-from __future__ import annotations
-
 import secrets
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .html import AssetMode, render_html
-from .payload import PreparedPayload, build_payload, restyle_payload
+from .payload import PreparedPayload, build_payload, build_payload_from_documents, restyle_payload
 from .server import ViewerHandle, start_viewer_server
 
 ColorValue = str | Sequence[int | float]
@@ -22,7 +18,7 @@ class IFCViewer:
     source:
         IFC path or raw IFC bytes.
     quality:
-        IFClite tessellation quality: ``lowest``, ``low``, ``medium``, ``high``,
+        IFX tessellation quality: ``lowest``, ``low``, ``medium``, ``high``,
         or ``highest``.
     title:
         Browser page title and viewer label.
@@ -77,6 +73,32 @@ class IFCViewer:
         kwargs.setdefault("title", filename)
         return cls(bytes(ifc_bytes), **kwargs)
 
+    @classmethod
+    def from_extraction(
+        cls, extraction: Mapping[str, Any], *, title: str = "IFC model", quality: str = "medium"
+    ) -> "IFCViewer":
+        viewer = cls(b"", title=title, quality=quality)
+        model = extraction["model"]
+        names = (
+            "spatial",
+            "relationships",
+            "openings",
+            "classifications",
+            "documents",
+            "groups",
+            "connections",
+            "georeferencing",
+            "materials",
+            "units",
+        )
+        viewer._base_prepared = build_payload_from_documents(
+            dict(extraction["geometry"], schema=model.get("schema")),
+            extraction["entities"],
+            quality=quality,
+            **{f"{name}_doc": model.get(name) for name in names},
+        )
+        return viewer
+
     @property
     def model_info(self) -> Mapping[str, Any]:
         """Summary metadata; preparing the model on first access."""
@@ -95,8 +117,50 @@ class IFCViewer:
 
         return self._prepare_base().metadata.get("references", {})
 
+    @property
+    def openings(self) -> Mapping[str, Any]:
+        """Host/opening/filling relationships and reverse indexes."""
+
+        return self._prepare_base().metadata.get("openings", {})
+
+    @property
+    def classifications(self) -> Mapping[str, Any]:
+        """Classification systems, references, and occurrence/type assignments."""
+
+        return self._prepare_base().metadata.get("classifications", {})
+
+    @property
+    def documents(self) -> Mapping[str, Any]:
+        """IFC document definitions and occurrence/type assignments."""
+
+        return self._prepare_base().metadata.get("documents", {})
+
+    @property
+    def groups(self) -> Mapping[str, Any]:
+        """IFC groups, zones, systems, memberships, and product assignments."""
+
+        return self._prepare_base().metadata.get("groups", {})
+
+    @property
+    def connections(self) -> Mapping[str, Any]:
+        """Element, port, and space-boundary connection data."""
+
+        return self._prepare_base().metadata.get("connections", {})
+
+    @property
+    def georeferencing(self) -> Mapping[str, Any]:
+        """Projected CRS, map conversion, and local-to-world transform metadata."""
+
+        return self._prepare_base().metadata.get("georeferencing", {})
+
+    @property
+    def units(self) -> Mapping[str, Any]:
+        """Resolved IFC project units keyed by IFC unit type."""
+
+        return self._prepare_base().metadata.get("units", {})
+
     def element_references(self, express_id: int) -> Mapping[str, Any]:
-        """Return the decoded ifcx-core references for one rendered element."""
+        """Return the decoded ifx-core references for one rendered element."""
 
         target = str(int(express_id))
         references = self.references.get("elements", {})
@@ -219,7 +283,7 @@ class IFCViewer:
         self._invalidate()
         return self
 
-    def to_html(self, *, asset_mode: AssetMode = "auto") -> str:
+    def to_html(self, *, asset_mode: AssetMode = "auto", module_script: str | None = None) -> str:
         """Return one HTML string with the compressed model embedded."""
 
         prepared = self._prepare()
@@ -227,6 +291,7 @@ class IFCViewer:
             title=self.title,
             payload=prepared.compressed,
             asset_mode=asset_mode,
+            module_script=module_script,
         )
 
     def write_html(

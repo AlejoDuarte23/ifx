@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>IFX viewer API</title>
+<style>html,body{height:100%;margin:0;font:14px system-ui}body{display:grid;grid-template-columns:1fr 260px}#viewer{min-width:0}aside{padding:20px;background:#f6f7f8}button,input{margin:8px 0}</style>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/","three-mesh-bvh":"../node_modules/three-mesh-bvh/build/index.module.js"}}</script>
+</head><body><div id="viewer"></div><aside><h1>IFX</h1><input type="file" accept=".ifc" id="file"><button id="add">Add sphere</button><fieldset id="section" disabled><legend>Section</legend><button data-section="x">X plane</button><button data-section="y">Y plane</button><button data-section="z">Z plane</button><label>Position <input id="section-position" type="range" min="0" max="100" value="50"></label><button id="section-toggle">On / off</button><button id="section-three">3 points</button><button id="section-vertical">2 points · vertical</button><button id="section-clear">Clear</button></fieldset><pre id="status">Choose an IFC4 file.</pre><pre id="selection"></pre></aside>
+<script type="module">
+import {createViewer, SectionPlanes} from '../dist/index.js';
+import * as THREE from 'three';
+const viewer=createViewer(document.getElementById('viewer'));
+window.viewer=viewer;
+const sections = new SectionPlanes(viewer);
+viewer.on("ready", () => { document.getElementById("section").disabled = false; });
+for (const button of document.querySelectorAll("[data-section]")) button.onclick = () => sections.setAxis(button.dataset.section);
+document.getElementById("section-position").oninput = event => sections.setPosition(Number(event.target.value) / 100);
+document.getElementById("section-toggle").onclick = () => sections.setActive(!sections.state.active);
+document.getElementById("section-three").onclick = () => sections.beginPick("three");
+document.getElementById("section-vertical").onclick = () => sections.beginPick("vertical");
+document.getElementById("section-clear").onclick = () => sections.clear();
+sections.subscribe(state => { document.getElementById("section-position").value = String(state.position * 100); });
+const status=document.getElementById('status');
+viewer.on('select',element=>document.getElementById('selection').textContent=element ? `${element.ifc_type} #${element.id}\n${element.name ?? ''}` : '');
+async function load(file){status.textContent='Loading…';try{const data=await viewer.load(file);status.textContent=`${data.geometry.element_count} elements\n${data.model.schema}\nWASM core ready`;}catch(error){status.textContent=String(error);throw error;}}
+document.getElementById('file').onchange=event=>load(event.target.files[0]);
+document.getElementById('add').onclick=()=>{const sphere=new THREE.Mesh(new THREE.SphereGeometry(1),new THREE.MeshBasicMaterial({color:0xff0000}));viewer.overlays.addMesh(sphere,'custom');viewer.invalidate();};
+const url=new URL(location.href).searchParams.get('model');
+if(url)await load(new Uint8Array(await (await fetch(url)).arrayBuffer()));
+</script></body></html>

@@ -1,7 +1,3 @@
-"""Convert IFClite's native Python output into a compact browser payload."""
-
-from __future__ import annotations
-
 import gzip
 import json
 import math
@@ -10,8 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Literal, Mapping, Sequence, cast
 
 import numpy as np
-
-from .units import extract_project_units
 
 MAGIC = b"IFCVIEW1"
 SECTION_ORDER = (
@@ -83,7 +77,7 @@ def build_payload(
 ) -> PreparedPayload:
     """Build a browser-ready payload from raw IFC bytes.
 
-    Heavy parsing and tessellation happen in the native ``ifclite_geom``
+    Heavy parsing and tessellation happen in the native ``ifx_core``
     extension. The returned geometry is merged into one opaque mesh and one
     transparent mesh to keep browser draw calls low.
     """
@@ -99,20 +93,19 @@ def build_payload(
         raise ValueError("compression_level must be between 0 and 9")
 
     try:
-        import ifclite_geom  # type: ignore[import-not-found]
-        import ifcx_core  # type: ignore[import-not-found]
+        import ifx_core  # type: ignore[import-not-found]
     except ImportError as exc:  # pragma: no cover - depends on installation
         raise ViewerBuildError(
             "The IFC native dependencies are not installed. Install this package with its "
-            "runtime dependencies: pip install ifcx"
+            "runtime dependencies: pip install ifx"
         ) from exc
 
     try:
         checked_quality = cast(Quality, quality)
-        geometry_doc = ifclite_geom.geometry_data_buffers(ifc_bytes, checked_quality)
+        geometry_doc = ifx_core.geometry_data_buffers(ifc_bytes, checked_quality)
         need_entities = include_properties or include_attributes or include_placements
         if need_entities:
-            entity_doc = ifclite_geom.entity_data(
+            entity_doc = ifx_core.entity_data(
                 ifc_bytes,
                 include_placements,
                 inherit_type_properties,
@@ -127,17 +120,24 @@ def build_payload(
                             row["quantity_sets"] = []
         else:
             entity_doc = {"entities": {}, "entity_count": 0}
-        core_doc = ifcx_core.model_data(ifc_bytes)
+        core_doc = ifx_core.model_data(ifc_bytes)
     except Exception as exc:  # native module exceptions vary by failure type
         raise ViewerBuildError(f"The IFC native parsers could not process the file: {exc}") from exc
 
+    geometry_doc = dict(geometry_doc, schema=core_doc.get("schema"))
     return build_payload_from_documents(
         geometry_doc,
         entity_doc,
         spatial_doc=core_doc.get("spatial"),
         relationships_doc=core_doc.get("relationships"),
+        openings_doc=core_doc.get("openings"),
+        classifications_doc=core_doc.get("classifications"),
+        documents_doc=core_doc.get("documents"),
+        groups_doc=core_doc.get("groups"),
+        connections_doc=core_doc.get("connections"),
+        georeferencing_doc=core_doc.get("georeferencing"),
         materials_doc=core_doc.get("materials"),
-        display_units=extract_project_units(ifc_bytes),
+        units_doc=core_doc.get("units"),
         quality=quality,
         initial_colors=initial_colors,
         hidden_ids=hidden_ids,
@@ -151,17 +151,24 @@ def build_payload_from_documents(
     *,
     spatial_doc: Mapping[str, Any] | None = None,
     relationships_doc: Mapping[str, Any] | None = None,
+    openings_doc: Mapping[str, Any] | None = None,
+    classifications_doc: Mapping[str, Any] | None = None,
+    documents_doc: Mapping[str, Any] | None = None,
+    groups_doc: Mapping[str, Any] | None = None,
+    connections_doc: Mapping[str, Any] | None = None,
+    georeferencing_doc: Mapping[str, Any] | None = None,
     materials_doc: Mapping[str, Any] | None = None,
+    units_doc: Mapping[str, Any] | None = None,
     display_units: Mapping[str, str] | None = None,
     quality: str = "medium",
     initial_colors: Mapping[int, str | Sequence[int | float]] | None = None,
     hidden_ids: Iterable[int] = (),
     compression_level: int = 6,
 ) -> PreparedPayload:
-    """Build a payload from already-extracted IFClite documents.
+    """Build a payload from already-extracted IFX documents.
 
     This public helper is useful for tests, caching layers, and applications
-    that already call ``ifclite_geom`` themselves.
+    that already call ``ifx_core`` themselves.
     """
 
     if quality not in VALID_QUALITIES:
@@ -309,6 +316,8 @@ def build_payload_from_documents(
         for name, arrays in batches.items()
     }
 
+    native_display_units = _display_units(units_doc or {})
+    selected_display_units = display_units if display_units is not None else native_display_units
     model_meta = {
         "schema": _optional_string(geometry_doc.get("schema"))
         or _optional_string(entity_doc.get("schema")),
@@ -324,23 +333,40 @@ def build_payload_from_documents(
         "units": str(geometry_doc.get("units") or "m"),
         "display_units": {
             str(unit_type).upper(): str(symbol)
-            for unit_type, symbol in (display_units or {}).items()
+            for unit_type, symbol in selected_display_units.items()
         },
         "up_axis": str(geometry_doc.get("up_axis") or "Z"),
         "length_unit_scale": _finite_number(entity_doc.get("length_unit_scale")),
         "plane_angle_to_radians": _finite_number(entity_doc.get("plane_angle_to_radians")),
         "project_id": entity_doc.get("project_id"),
+        "has_georeference": bool((georeferencing_doc or {}).get("has_georeference", False)),
+        "crs_name": _optional_string(
+            ((georeferencing_doc or {}).get("projected_crs") or {}).get("name")
+            if isinstance((georeferencing_doc or {}).get("projected_crs"), Mapping)
+            else None
+        ),
     }
     metadata = {
-        "format": "ifcx",
+        "format": "ifx",
         "version": 1,
         "model": model_meta,
         "batches": batch_meta,
         "elements": metadata_elements,
         "spatial": _jsonable(spatial_doc or {}),
+        "openings": _jsonable(openings_doc or {}),
+        "classifications": _jsonable(classifications_doc or {}),
+        "documents": _jsonable(documents_doc or {}),
+        "groups": _jsonable(groups_doc or {}),
+        "connections": _jsonable(connections_doc or {}),
+        "georeferencing": _jsonable(georeferencing_doc or {}),
+        "units": _jsonable(units_doc or {}),
         "references": _build_reference_index(
             spatial_doc or {},
             relationships_doc or {},
+            classifications_doc or {},
+            documents_doc or {},
+            groups_doc or {},
+            connections_doc or {},
             materials_doc or {},
             entity_rows,
             {int(element["id"]) for element in metadata_elements},
@@ -360,6 +386,20 @@ def build_payload_from_documents(
     raw = pack_container(metadata, sections)
     compressed = gzip.compress(raw, compresslevel=compression_level, mtime=0)
     return PreparedPayload(compressed=compressed, raw_size=len(raw), metadata=metadata)
+
+
+def _display_units(units_doc: Mapping[str, Any]) -> dict[str, str]:
+    by_type = units_doc.get("by_type", {})
+    if not isinstance(by_type, Mapping):
+        return {}
+    result: dict[str, str] = {}
+    for raw_unit_type, raw_unit in by_type.items():
+        if not isinstance(raw_unit, Mapping):
+            continue
+        symbol = _optional_string(raw_unit.get("symbol"))
+        if symbol:
+            result[str(raw_unit_type).upper()] = symbol
+    return result
 
 
 def restyle_payload(
@@ -604,11 +644,15 @@ def _parse_color(value: Any) -> tuple[int, int, int, int]:
 def _build_reference_index(
     spatial_doc: Mapping[str, Any],
     relationships_doc: Mapping[str, Any],
+    classifications_doc: Mapping[str, Any],
+    documents_doc: Mapping[str, Any],
+    groups_doc: Mapping[str, Any],
+    connections_doc: Mapping[str, Any],
     materials_doc: Mapping[str, Any],
     entity_rows: Mapping[Any, Any],
     element_ids: set[int],
 ) -> dict[str, Any]:
-    """Compact ifcx-core references for fast per-element browser lookup."""
+    """Compact ifx-core references for fast per-element browser lookup."""
 
     elements: dict[str, dict[str, Any]] = {}
 
@@ -670,6 +714,8 @@ def _build_reference_index(
             relationship_type = _optional_string(raw_edge.get("relationship_type"))
             if relationship_type in {
                 "IfcRelAssociatesMaterial",
+                "IfcRelAssociatesClassification",
+                "IfcRelAssociatesDocument",
                 "IfcRelContainedInSpatialStructure",
             }:
                 continue
@@ -709,6 +755,116 @@ def _build_reference_index(
             "name": _optional_string(row.get("name")),
             "object_type": _optional_string(row.get("object_type")),
         }
+
+    used_classification_ids = _attach_assignments(
+        classifications_doc.get("element_classifications", {}),
+        "classifications",
+        elements,
+        element_ids,
+        include_embedded=False,
+    )
+    classification_references = _select_definitions(
+        classifications_doc.get("references", {}), used_classification_ids
+    )
+    classification_systems = _select_definitions(
+        classifications_doc.get("systems", {}), used_classification_ids
+    )
+
+    used_document_ids = _attach_assignments(
+        documents_doc.get("element_documents", {}),
+        "documents",
+        elements,
+        element_ids,
+        include_embedded=False,
+    )
+    document_definitions = _select_definitions(
+        documents_doc.get("definitions", {}), used_document_ids
+    )
+
+    used_group_ids: set[int] = set()
+    raw_groups_by_object = groups_doc.get("groups_by_object", {})
+    if isinstance(raw_groups_by_object, Mapping):
+        for raw_element_id, raw_memberships in raw_groups_by_object.items():
+            element_id = _int_or_none(raw_element_id)
+            if element_id not in element_ids or not isinstance(raw_memberships, Sequence):
+                continue
+            memberships = []
+            for raw_membership in raw_memberships:
+                if not isinstance(raw_membership, Mapping):
+                    continue
+                group_id = _int_or_none(raw_membership.get("group_id"))
+                if group_id is None:
+                    continue
+                used_group_ids.add(group_id)
+                memberships.append(
+                    {
+                        "relationship_id": _int_or_none(raw_membership.get("relationship_id")),
+                        "group_id": group_id,
+                        "factor": _finite_number(raw_membership.get("factor")),
+                    }
+                )
+            if memberships:
+                element_reference(element_id)["groups"] = memberships
+    group_definitions = _select_definitions(groups_doc.get("definitions", {}), used_group_ids)
+
+    element_connections_by_id = _rows_by_id(
+        connections_doc.get("element_connections", []), "relationship_id"
+    )
+    _attach_indexed_rows(
+        connections_doc.get("connections_by_element", {}),
+        "connections",
+        element_connections_by_id,
+        elements,
+        element_ids,
+    )
+    space_boundaries_by_id = _rows_by_id(
+        connections_doc.get("space_boundaries", []), "relationship_id"
+    )
+    _attach_indexed_rows(
+        connections_doc.get("boundaries_by_element", {}),
+        "space_boundaries",
+        space_boundaries_by_id,
+        elements,
+        element_ids,
+    )
+    _attach_indexed_rows(
+        connections_doc.get("boundaries_by_space", {}),
+        "space_boundaries",
+        space_boundaries_by_id,
+        elements,
+        element_ids,
+    )
+    used_port_ids: set[int] = set()
+    raw_ports_by_element = connections_doc.get("ports_by_element", {})
+    connected_ports = connections_doc.get("connected_ports", {})
+    if isinstance(raw_ports_by_element, Mapping):
+        for raw_element_id, raw_port_ids in raw_ports_by_element.items():
+            element_id = _int_or_none(raw_element_id)
+            if element_id not in element_ids or not isinstance(raw_port_ids, Sequence):
+                continue
+            port_rows = []
+            for raw_port_id in raw_port_ids:
+                port_id = _int_or_none(raw_port_id)
+                if port_id is None:
+                    continue
+                used_port_ids.add(port_id)
+                linked = []
+                if isinstance(connected_ports, Mapping):
+                    linked = connected_ports.get(port_id, connected_ports.get(str(port_id), []))
+                linked_ids = (
+                    [
+                        value
+                        for raw_value in linked
+                        if (value := _int_or_none(raw_value)) is not None
+                    ]
+                    if isinstance(linked, Sequence)
+                    else []
+                )
+                used_port_ids.update(linked_ids)
+                port_rows.append({"port_id": port_id, "connected_ports": linked_ids})
+            if port_rows:
+                element_reference(element_id)["ports"] = port_rows
+    port_definitions = _select_definitions(connections_doc.get("ports", {}), used_port_ids)
 
     used_material_ids: set[int] = set()
     element_materials = materials_doc.get("element_materials", {})
@@ -751,7 +907,111 @@ def _build_reference_index(
         "spatial_nodes": spatial_nodes,
         "referenced_entities": referenced_entities,
         "material_definitions": definitions,
+        "classification_references": classification_references,
+        "classification_systems": classification_systems,
+        "document_definitions": document_definitions,
+        "group_definitions": group_definitions,
+        "port_definitions": port_definitions,
     }
+
+
+def _attach_assignments(
+    raw_by_element: Any,
+    output_key: str,
+    elements: dict[str, dict[str, Any]],
+    element_ids: set[int],
+    *,
+    include_embedded: bool,
+) -> set[int]:
+    used_ids: set[int] = set()
+    if not isinstance(raw_by_element, Mapping):
+        return used_ids
+    for raw_element_id, raw_assignments in raw_by_element.items():
+        element_id = _int_or_none(raw_element_id)
+        if element_id not in element_ids or not isinstance(raw_assignments, Sequence):
+            continue
+        assignments = []
+        for raw_assignment in raw_assignments:
+            if not isinstance(raw_assignment, Mapping):
+                continue
+            definition_id = _int_or_none(
+                raw_assignment.get("classification_id", raw_assignment.get("definition_id"))
+            )
+            if definition_id is None:
+                continue
+            used_ids.add(definition_id)
+            assignment = {
+                "definition_id": definition_id,
+                "inherited_from_type": _int_or_none(raw_assignment.get("inherited_from_type")),
+            }
+            if include_embedded and isinstance(raw_assignment.get("document"), Mapping):
+                assignment["document"] = _jsonable(raw_assignment["document"])
+            assignments.append(assignment)
+        if assignments:
+            elements.setdefault(str(element_id), {})[output_key] = assignments
+    return used_ids
+
+
+def _select_definitions(raw_definitions: Any, used_ids: set[int]) -> dict[str, Any]:
+    selected: dict[str, Any] = {}
+    if not isinstance(raw_definitions, Mapping):
+        return selected
+    for definition_id in used_ids:
+        definition = raw_definitions.get(definition_id)
+        if definition is None:
+            definition = raw_definitions.get(str(definition_id))
+        if isinstance(definition, Mapping):
+            selected[str(definition_id)] = _jsonable(definition)
+    return selected
+
+
+def _rows_by_id(raw_rows: Any, key: str) -> dict[int, Mapping[str, Any]]:
+    output: dict[int, Mapping[str, Any]] = {}
+    if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
+        return output
+    for row in raw_rows:
+        if not isinstance(row, Mapping):
+            continue
+        row_id = _int_or_none(row.get(key))
+        if row_id is not None:
+            output[row_id] = row
+    return output
+
+
+def _attach_indexed_rows(
+    raw_index: Any,
+    output_key: str,
+    rows_by_id: Mapping[int, Mapping[str, Any]],
+    elements: dict[str, dict[str, Any]],
+    element_ids: set[int],
+) -> None:
+    if not isinstance(raw_index, Mapping):
+        return
+    for raw_element_id, raw_row_ids in raw_index.items():
+        element_id = _int_or_none(raw_element_id)
+        if element_id not in element_ids or not isinstance(raw_row_ids, Sequence):
+            continue
+        rows = []
+        existing_ids: set[int] = set()
+        current = elements.setdefault(str(element_id), {}).get(output_key, [])
+        if isinstance(current, list):
+            rows.extend(current)
+            existing_ids.update(
+                row_id
+                for row in current
+                if isinstance(row, Mapping)
+                and (row_id := _int_or_none(row.get("relationship_id"))) is not None
+            )
+        for raw_row_id in raw_row_ids:
+            row_id = _int_or_none(raw_row_id)
+            if row_id is None:
+                continue
+            row = rows_by_id.get(row_id)
+            if row is not None and row_id not in existing_ids:
+                rows.append(_jsonable(row))
+                existing_ids.add(row_id)
+        if rows:
+            elements[str(element_id)][output_key] = rows
 
 
 def _int_or_none(value: Any) -> int | None:
